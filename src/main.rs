@@ -82,7 +82,7 @@ fn main() {
         // Events
         for ev in events.poll_iter() {
             match ev {
-                Event::Quit {timestamp: t} => {
+                Event::Quit {timestamp: _} => {
                     quit = true;
                 }
                 _ => {}
