@@ -9,7 +9,6 @@ use self::sdl2::event::Event;
 use self::sdl2::render::Renderer;
 use self::sdl2::render::Texture;
 
-use utils::FatalAction;
 use utils::ResultMap;
 use rendererutils::RendererUtils;
 
@@ -36,12 +35,6 @@ pub struct GameLoop {
     height: u32,
 }
 
-struct RunLoopData<'a> {
-    renderer: Renderer<'a>,
-    timer: TimerSubsystem,
-    events: EventPump
-}
-
 impl GameLoop {
     pub fn new(width: u32, height: u32) -> SdlResult<GameLoop> {
         sdl2::init().res_map(|context| context.video().map(|video| GameLoop {
@@ -57,24 +50,17 @@ impl GameLoop {
             .res_map(|builder| builder.renderer().accelerated().present_vsync().build())
     }
 
-    fn build_runloop_data(&self) -> SdlResult<RunLoopData> {
-        self.build_renderer().res_map(|renderer| self.context.timer()
-            .res_map(|timer| self.context.event_pump().map(|events| RunLoopData {
-                renderer: renderer,
-                timer: timer,
-                events: events
-            })))
-    }
-
-    pub fn do_run(&self, mut rd: RunLoopData) {
-        let background = rd.renderer.load_bmp("background.bmp").or_die("create texture");
-        let image = rd.renderer.load_bmp("image.bmp").or_die("create texture");
-
+    fn do_run(&self,
+              mut renderer: Renderer,
+              mut timer: TimerSubsystem,
+              mut events: EventPump,
+              background: Texture,
+              image: Texture) {
         let mut quit = false;
         while !quit {
-            let start_ticks = rd.timer.ticks();
+            let start_ticks = timer.ticks();
             // Events
-            for ev in rd.events.poll_iter() {
+            for ev in events.poll_iter() {
                 match ev {
                     Event::Quit {timestamp: _} => {
                         quit = true;
@@ -84,19 +70,23 @@ impl GameLoop {
             }
             // Logic
             // Rendering
-            rd.renderer.clear();
-            draw_bg(&mut rd.renderer, &background);
-            draw_fg(&mut rd.renderer, &image, self.width, self.height);
-            rd.renderer.present();
+            renderer.clear();
+            draw_bg(&mut renderer, &background);
+            draw_fg(&mut renderer, &image, self.width, self.height);
+            renderer.present();
 
-            while rd.timer.ticks() - start_ticks < 1000 / 60 {
-                rd.timer.delay(1);
+            while timer.ticks() - start_ticks < 1000 / 60 {
+                timer.delay(1);
             }
         }
     }
 
     pub fn run(&self) -> SdlResult<()> {
-        self.build_runloop_data().map(|rd| self.do_run(rd))
+        self.build_renderer().res_map(|renderer| self.context.timer()
+            .res_map(|timer| self.context.event_pump()
+            .res_map(|events| renderer.load_bmp("background.bmp")
+            .res_map(|background| renderer.load_bmp("image.bmp")
+            .map(|image| self.do_run(renderer, timer, events, background, image))))))
     }
 }
 

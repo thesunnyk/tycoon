@@ -8,7 +8,7 @@ use self::sdl2::rect::Rect;
 use self::sdl2::render::Renderer;
 use self::sdl2::render::Texture;
 
-use utils::FatalAction;
+use utils::ResultMap;
 
 pub trait RendererUtils {
     fn load_bmp<P: AsRef<Path>>(&self, name: P) -> SdlResult<Texture>;
@@ -17,8 +17,7 @@ pub trait RendererUtils {
 
 impl<'a> RendererUtils for Renderer<'a> {
     fn load_bmp<P: AsRef<Path>>(&self, name: P) -> SdlResult<Texture> {
-        let surface = Surface::load_bmp(name).or_die("load BMP");
-        self.create_texture_from_surface(surface)
+        Surface::load_bmp(name).res_map(|surface| self.create_texture_from_surface(surface))
     }
 
     fn render_texture(&mut self, tex: &Texture, x: i32, y: i32) {
