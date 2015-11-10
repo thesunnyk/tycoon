@@ -36,17 +36,22 @@ pub struct GameLoop {
 }
 
 impl GameLoop {
-    pub fn new(width: u32, height: u32) -> SdlResult<GameLoop> {
-        sdl2::init().res_map(|context| context.video().map(|video| GameLoop {
-                context: context,
-                width: width,
-                height: height,
-                video: video
-            }))
+    pub fn new() -> SdlResult<GameLoop> {
+        sdl2::init().res_map(|context| context.video()
+            .res_map(|video| video.current_display_mode(0)
+            .map(|curmode| {
+                println!("Using mode: {}x{}", curmode.w, curmode.h);
+                GameLoop {
+                    context: context,
+                    width: curmode.w as u32,
+                    height: curmode.h as u32,
+                    video: video
+                }
+            })))
     }
 
     fn build_renderer(&self) -> SdlResult<Renderer> {
-        self.video.window("Cretacious Island", self.width, self.height).build()
+        self.video.window("Cretacious Island", self.width, self.height).fullscreen().build()
             .res_map(|builder| builder.renderer().accelerated().present_vsync().build())
     }
 
@@ -63,6 +68,7 @@ impl GameLoop {
             for ev in events.poll_iter() {
                 match ev {
                     Event::Quit {timestamp: _} => {
+                        println!("Quitting");
                         quit = true;
                     }
                     _ => {}
