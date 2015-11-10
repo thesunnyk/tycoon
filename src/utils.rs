@@ -20,18 +20,3 @@ impl<T, E: Debug> FatalAction<T, E> for Result<T, E> {
     }
 }
 
-pub trait ResultMap<T, E> {
-    fn res_map<U, F>(self, op: F) -> Result<U, E>
-        where F: FnOnce(T) -> Result<U, E>;
-}
-
-impl<T, E> ResultMap<T, E> for Result<T, E> {
-    fn res_map<U, F>(self, op: F) -> Result<U, E>
-        where F: FnOnce(T) -> Result<U, E> {
-        match self {
-            Err(x) => Err(x),
-            Ok(x) => op(x)
-        }
-    }
-}
-
