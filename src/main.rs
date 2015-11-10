@@ -2,6 +2,8 @@
 mod gameloop;
 mod utils;
 mod rendererutils;
+// Just to make spath compile
+mod spath;
 
 use gameloop::GameLoop;
 use utils::FatalAction;

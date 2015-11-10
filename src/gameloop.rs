@@ -50,15 +50,14 @@ impl GameLoop {
               mut timer: TimerSubsystem,
               mut events: EventPump,
               logo: Texture) {
-        let mut quit = false;
-        while !quit {
+        loop {
             let start_ticks = timer.ticks();
             // Events
             for ev in events.poll_iter() {
                 match ev {
                     Event::Quit {timestamp: _} => {
                         println!("Quitting");
-                        quit = true;
+                        break;
                     }
                     _ => {}
                 }
