@@ -13,6 +13,7 @@
 use std::str::FromStr;
 use std::borrow::Borrow;
 
+#[derive(Debug)]
 pub enum PathElem {
     MoveTo { x: f64, y: f64 },
     LineTo { x: f64, y: f64 },
@@ -63,12 +64,12 @@ fn switch_commas_with_spaces(s: &str) -> String {
 }
 
 fn get_cmd(s: &str) -> Option<(PathToken, &str)> {
-    let (cmd, rest) = s.trim_left().split_at(0);
+    let (cmd, rest) = s.trim_left().split_at(1);
     cmd.chars().next().and_then(|cmd_char| get_cmd_char(cmd_char).map(|cmd| (cmd, rest)))
 }
 
 fn split_num(s: &str) -> (&str, &str) {
-    s.split_at(s.find(|c: char| c != '.' && !c.is_numeric()).unwrap_or(s.len()))
+    s.split_at(s.find(|c: char| c != '.' && c != '-' && !c.is_numeric()).unwrap_or(s.len()))
 }
 
 fn get_f64(s: &str) -> Option<(f64, &str)> {
@@ -152,7 +153,7 @@ fn get_a<'a>(s: &'a str) -> Option<(PathParams, &'a str)> {
         .and_then(|(a4, s4)| get_bool(s4)
         .and_then(|(a5, s5)| get_f64(s5)
         .and_then(|(a6, s6)| get_f64(s6)
-        .map(|(a7, s7)| (PathParams::AParam(a1, a2, a3, a4, a5, a6, a7), s6))
+        .map(|(a7, s7)| (PathParams::AParam(a1, a2, a3, a4, a5, a6, a7), s7))
         ))))))
 }
 
@@ -176,7 +177,8 @@ fn get_cmd_with_params(s: &str) -> Option<(PathToken, Vec<PathParams>, &str)> {
 
 fn tokenize(si: &str) -> Vec<(PathToken, Vec<PathParams>)> {
     let s: String = switch_commas_with_spaces(si);
-    let mut so: &str = s.borrow();
+    let mut sb: &str = s.borrow();
+    let mut so = sb.trim_left();
     let mut v = Vec::<(PathToken, Vec<PathParams>)>::new();
     while !so.is_empty() {
         let maybe_cmd = get_cmd_with_params(so);
@@ -403,19 +405,20 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
     let origin = (0 as f64, 0 as f64);
     match token {
         PathToken::M(abs) => {
-            let lpt = if abs { None } else { s.last_pt() };
+            let lpt1 = if abs { None } else { s.last_pt() };
             let move_loc = params.remove(0);
-            let mt = move_to(lpt, &move_loc).unwrap();
+            let mt = move_to(lpt1, &move_loc).unwrap();
             s.update(mt);
             for p in params {
+                let lpt = if abs { None } else { s.last_pt() };
                 let elem = line_to(lpt, &p).unwrap();
                 s.update(elem);
             }
         },
         PathToken::Z => {
             let (ix, iy) = s.initial_pt().unwrap_or(origin);
-            s.update(PathElem::LineTo { x: ix, y: iy });
             let (px, py) = s.last_pt().unwrap_or(origin);
+            s.update(PathElem::LineTo { x: ix, y: iy });
             s.update(PathElem::MoveTo { x: px, y: py });
         },
         PathToken::L(abs) => {
