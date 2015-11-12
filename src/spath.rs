@@ -22,12 +22,12 @@ pub enum PathElem {
 }
 
 enum PathToken {
-    MU, ML,
+    M(bool),
     Z, // upper and lowercase are identical
-    LU, LL, HU, HL, VU, VL,
-    CU, CL, SU, SL,
-    QU, QL, TU, TL,
-    AU, AL,
+    L(bool), H(bool), V(bool),
+    C(bool), S(bool),
+    Q(bool), T(bool),
+    A(bool),
 }
 
 enum PathParams {
@@ -39,27 +39,17 @@ enum PathParams {
 }
 
 fn get_cmd_char(c: char) -> Option<PathToken> {
-    match c {
-        'M' => Some(PathToken::MU),
-        'm' => Some(PathToken::ML),
-        'z' => Some(PathToken::Z),
+    match c.to_uppercase().next().unwrap() {
+        'M' => Some(PathToken::M(c.is_uppercase())),
         'Z' => Some(PathToken::Z),
-        'L' => Some(PathToken::LU),
-        'l' => Some(PathToken::LL),
-        'H' => Some(PathToken::HU),
-        'h' => Some(PathToken::HL),
-        'V' => Some(PathToken::VU),
-        'v' => Some(PathToken::VL),
-        'C' => Some(PathToken::CU),
-        'c' => Some(PathToken::CL),
-        'S' => Some(PathToken::SU),
-        's' => Some(PathToken::SL),
-        'Q' => Some(PathToken::QU),
-        'q' => Some(PathToken::QL),
-        'T' => Some(PathToken::TU),
-        't' => Some(PathToken::TL),
-        'A' => Some(PathToken::AU),
-        'a' => Some(PathToken::AL),
+        'L' => Some(PathToken::L(c.is_uppercase())),
+        'H' => Some(PathToken::H(c.is_uppercase())),
+        'V' => Some(PathToken::V(c.is_uppercase())),
+        'C' => Some(PathToken::C(c.is_uppercase())),
+        'S' => Some(PathToken::S(c.is_uppercase())),
+        'Q' => Some(PathToken::Q(c.is_uppercase())),
+        'T' => Some(PathToken::T(c.is_uppercase())),
+        'A' => Some(PathToken::A(c.is_uppercase())),
         _ => None
     }
 }
@@ -172,16 +162,15 @@ fn get_as(s: &str) -> Option<(Vec<PathParams>, &str)> {
 
 fn get_cmd_with_params(s: &str) -> Option<(PathToken, Vec<PathParams>, &str)> {
     get_cmd(s).and_then(|(cmd, rest)| match cmd {
-        PathToken::MU | PathToken::ML | PathToken::LU | PathToken::LL | PathToken::TU |
-            PathToken::TL =>
+        PathToken::M(_) | PathToken::L(_) | PathToken::T(_) =>
             get_mlts(rest).map(|(mlts, others)| (cmd, mlts, others)),
         PathToken::Z => Some((cmd, Vec::new(), rest)),
-        PathToken::HU | PathToken::HL | PathToken::VU | PathToken::VL =>
+        PathToken::H(_) | PathToken::V(_) =>
             get_hvs(rest).map(|(hvs, others)| (cmd, hvs, others)),
-        PathToken::CU | PathToken::CL => get_cs(rest).map(|(cs, others)| (cmd, cs, others)),
-        PathToken::SU | PathToken::SL | PathToken::QU | PathToken::QL =>
+        PathToken::C(_) => get_cs(rest).map(|(cs, others)| (cmd, cs, others)),
+        PathToken::S(_) | PathToken::Q(_) =>
             get_sqs(rest).map(|(sqs, others)| (cmd, sqs, others)),
-        PathToken::AU | PathToken::AL => get_as(rest).map(|(a, others)| (cmd, a, others))
+        PathToken::A(_) => get_as(rest).map(|(a, others)| (cmd, a, others))
     })
 }
 
@@ -413,19 +402,13 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
                  mut s: PathState) -> PathState {
     let origin = (0 as f64, 0 as f64);
     match token {
-        PathToken::MU => {
+        PathToken::M(abs) => {
+            let lpt = if abs { None } else { s.last_pt() };
             let move_loc = params.remove(0);
-            s.update(move_to(None, &move_loc).unwrap());
-            for p in params {
-                s.update(line_to(None, &p).unwrap());
-            }
-        },
-        PathToken::ML => {
-            let move_loc = params.remove(0);
-            let mt = move_to(s.last_pt(), &move_loc).unwrap();
+            let mt = move_to(lpt, &move_loc).unwrap();
             s.update(mt);
             for p in params {
-                let elem = line_to(s.last_pt(), &p).unwrap();
+                let elem = line_to(lpt, &p).unwrap();
                 s.update(elem);
             }
         },
@@ -435,78 +418,62 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
             let (px, py) = s.last_pt().unwrap_or(origin);
             s.update(PathElem::MoveTo { x: px, y: py });
         },
-        PathToken::LU => for p in params {
-            s.update(line_to(None, &p).unwrap());
+        PathToken::L(abs) => {
+            let lpt = if abs { None } else { s.last_pt() };
+            for p in params {
+                let elem = line_to(lpt, &p).unwrap();
+                s.update(elem);
+            }
         },
-        PathToken::LL => for p in params {
-            let elem = line_to(s.last_pt(), &p).unwrap();
+        PathToken::H(abs) => for p in params {
+            let elem = line_to_h(abs, s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
-        PathToken::HU =>  for p in params {
-            let elem = line_to_h(true, s.last_pt().unwrap_or(origin), &p).unwrap();
+        PathToken::V(abs) => for p in params {
+            let elem = line_to_v(abs, s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
-        PathToken::HL =>  for p in params {
-            let elem = line_to_h(false, s.last_pt().unwrap_or(origin), &p).unwrap();
-            s.update(elem);
+        PathToken::C(abs) => {
+            let lpt = if abs { None } else { s.last_pt() };
+            for p in params {
+                let elem = curve_to(lpt, &p).unwrap();
+                s.update(elem);
+            }
         },
-        PathToken::VU => for p in params {
-            let elem = line_to_v(true, s.last_pt().unwrap_or(origin), &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::VL => for p in params {
-            let elem = line_to_v(false, s.last_pt().unwrap_or(origin), &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::CU => for p in params {
-            let elem = curve_to(None, &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::CL => for p in params {
-            let elem = curve_to(s.last_pt(), &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::SU => for p in params {
-            let elem = smooth_curve_to(true, s.last_curve_cp(),
+        PathToken::S(abs) => for p in params {
+            let elem = smooth_curve_to(abs, s.last_curve_cp(),
                                      s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
-        PathToken::SL => for p in params {
-            let elem = smooth_curve_to(false, s.last_curve_cp(),
-                                     s.last_pt().unwrap_or(origin), &p).unwrap();
-            s.update(elem);
+        PathToken::Q(abs) => {
+            let lpt = if abs { None } else { s.last_pt() };
+            for p in params {
+                let elem = quad_to(lpt, &p).unwrap();
+                s.update(elem);
+            }
         },
-
-        PathToken::QU => for p in params {
-            let elem = quad_to(None, &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::QL => for p in params {
-            let elem = quad_to(s.last_pt(), &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::TU => for p in params {
-            let elem = t_quad_to(true, s.last_quad_cp(),
+        PathToken::T(abs) => for p in params {
+            let elem = t_quad_to(abs, s.last_quad_cp(),
                 s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
-        PathToken::TL => for p in params {
-            let elem = t_quad_to(false, s.last_quad_cp(),
-                s.last_pt().unwrap_or(origin), &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::AU => for p in params {
-            let elem = arc_to(None, &p).unwrap();
-            s.update(elem);
-        },
-        PathToken::AL => for p in params {
-            let elem = arc_to(s.last_pt(), &p).unwrap();
-            s.update(elem);
+        PathToken::A(abs) => {
+            let lpt = if abs { None } else { s.last_pt() };
+            for p in params {
+                let elem = arc_to(lpt, &p).unwrap();
+                s.update(elem);
+            }
         }
     };
 
     s
 }
 
-// pub fn read_path(s: &str) -> Vec<PathElem> {
-// }
+pub fn read_path(s: &str) -> Vec<PathElem> {
+    let tokens = tokenize(s);
+    let mut state = PathState::new();
+    for (token, params) in tokens {
+        state = convert_token(token, params, state);
+    }
+    state.v
+}
