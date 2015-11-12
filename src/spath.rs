@@ -14,7 +14,7 @@ use std::str::FromStr;
 use std::borrow::Borrow;
 
 pub enum PathElem {
-    Move { x: f64, y: f64 },
+    MoveTo { x: f64, y: f64 },
     LineTo { x: f64, y: f64 },
     CurveTo { x1: f64, y1: f64, x2: f64, y2: f64, x: f64, y: f64 },
     QuadraticTo { x2: f64, y2: f64, x: f64, y: f64 },
@@ -199,6 +199,116 @@ fn tokenize(si: &str) -> Vec<(PathToken, Vec<PathParams>)> {
         v.push((token, params));
         so = nexts.trim_left();
     }
+    v
+}
+
+fn point_for(elem: &PathElem) -> (f64, f64) {
+    match *elem {
+        PathElem::MoveTo { x, y } => (x, y),
+        PathElem::LineTo { x, y } => (x, y),
+        PathElem::CurveTo { x, y, .. } => (x, y),
+        PathElem::QuadraticTo { x, y, .. } => (x, y),
+        PathElem::ArcTo { x, y, .. } => (x, y)
+    }
+}
+
+fn move_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
+    match *params {
+        PathParams::MLTParam(x, y) => Some(pt.map_or_else(|| PathElem::MoveTo { x: x, y: y },
+        |p| PathElem::MoveTo { x: x + p.0, y: y + p.1 })),
+        _ => None
+    }
+}
+
+fn line_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
+    match *params {
+        PathParams::MLTParam(x, y) => Some(pt.map_or_else(|| PathElem::LineTo { x: x, y: y },
+        |p| PathElem::LineTo { x: x + p.0, y: y + p.1 })),
+        _ => None
+    }
+}
+
+fn line_to_h(abs: bool, p: (f64, f64), params: &PathParams) -> Option<PathElem> {
+    match *params {
+        PathParams::HVParam(x) => Some(if abs {
+            PathElem::LineTo { x: x, y: p.1 }
+        } else {
+            PathElem::LineTo { x: x + p.0, y: p.1 }
+        }),
+        _ => None
+    }
+}
+
+fn line_to_v(abs: bool, p: (f64, f64), params: &PathParams) -> Option<PathElem> {
+    match *params {
+        PathParams::HVParam(y) => Some(if abs {
+            PathElem::LineTo { x: p.0, y: y }
+        } else {
+            PathElem::LineTo { x: p.0, y: y + p.1 }
+        }),
+        _ => None
+    }
+}
+
+fn convert_token(token: PathToken, mut params: Vec<PathParams>,
+                 prev_pt_cmd: Option<(PathToken, f64, f64)>) -> Vec<PathElem> {
+    let mut v = Vec::<PathElem>::new();
+    let mut prev_pt = prev_pt_cmd.map(|(_, x, y)| (x, y));
+
+    match token {
+        PathToken::MU => {
+            let move_loc = params.remove(0);
+            v.push(move_to(None, &move_loc).unwrap());
+            for p in params {
+                v.push(line_to(None, &p).unwrap());
+            }
+        },
+        PathToken::ML => {
+            let move_loc = params.remove(0);
+            let mv = move_to(prev_pt, &move_loc).unwrap();
+            prev_pt = Some(point_for(&mv));
+            v.push(mv);
+            for p in params {
+                let elem = line_to(prev_pt, &p).unwrap();
+                prev_pt = Some(point_for(&elem));
+                v.push(elem);
+            }
+        },
+        PathToken::Z => panic!("Figure this out later"), // line_to init_pt; move_to prev_pt
+        PathToken::LU => for p in params {
+            v.push(line_to(None, &p).unwrap());
+        },
+        PathToken::LL => for p in params {
+            let elem = line_to(prev_pt, &p).unwrap();
+            prev_pt = Some(point_for(&elem));
+            v.push(elem);
+        },
+        PathToken::HU =>  for p in params {
+            v.push(line_to_h(true, prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap());
+        },
+        PathToken::HL =>  for p in params {
+            let elem = line_to_h(false, prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            prev_pt = Some(point_for(&elem));
+            v.push(elem);
+        },
+        PathToken::VU => for p in params {
+            v.push(line_to_v(true, prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap());
+        },
+        PathToken::VL => for p in params {
+            let elem = line_to_v(false, prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            prev_pt = Some(point_for(&elem));
+            v.push(elem);
+        },
+        PathToken::CU => panic!("Not Implemented"),
+        PathToken::CL => panic!("Not Implemented"),
+        PathToken::SU => panic!("Not Implemented"),
+        PathToken::SL => panic!("Not Implemented"),
+
+        PathToken::QU | PathToken::QL => panic!("Not Implemented"),
+        PathToken::TU | PathToken::TL => panic!("Not Implemented"),
+        PathToken::AU | PathToken::AL => panic!("Not Implemented")
+    };
+
     v
 }
 
