@@ -17,7 +17,7 @@ pub enum PathElem {
     MoveTo { x: f64, y: f64 },
     LineTo { x: f64, y: f64 },
     CurveTo { x1: f64, y1: f64, x2: f64, y2: f64, x: f64, y: f64 },
-    QuadraticTo { x2: f64, y2: f64, x: f64, y: f64 },
+    QuadraticTo { x1: f64, y1: f64, x: f64, y: f64 },
     ArcTo { rx: f64, ry: f64, x_rotation: f64, lrg_arc: bool, sweep: bool, x: f64, y: f64 }
 }
 
@@ -205,7 +205,7 @@ fn tokenize(si: &str) -> Vec<(PathToken, Vec<PathParams>)> {
 fn move_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
     match *params {
         PathParams::MLTParam(x, y) => Some(pt.map_or_else(|| PathElem::MoveTo { x: x, y: y },
-        |p| PathElem::MoveTo { x: x + p.0, y: y + p.1 })),
+        |(cx, cy)| PathElem::MoveTo { x: x + cx, y: y + cy })),
         _ => None
     }
 }
@@ -213,7 +213,7 @@ fn move_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
 fn line_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
     match *params {
         PathParams::MLTParam(x, y) => Some(pt.map_or_else(|| PathElem::LineTo { x: x, y: y },
-        |p| PathElem::LineTo { x: x + p.0, y: y + p.1 })),
+        |(cx, cy)| PathElem::LineTo { x: x + cx, y: y + cy })),
         _ => None
     }
 }
@@ -250,31 +250,32 @@ fn curve_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
             x: x,
             y: y
         },
-        |p| PathElem::CurveTo {
-            x1: x1 + p.0,
-            y1: y1 + p.1,
-            x2: x2 + p.0,
-            y2: y2 + p.1,
-            x: x + p.0,
-            y: y + p.1
+        |(cx, cy)| PathElem::CurveTo {
+            x1: x1 + cx,
+            y1: y1 + cy,
+            x2: x2 + cx,
+            y2: y2 + cy,
+            x: x + cx,
+            y: y + cy
         })),
         _ => None
     }
+}
+
+fn reflect(p: (f64, f64), r: (f64, f64)) -> (f64, f64) {
+        (2.0*p.0 - r.0, 2.0*p.1 - r.1)
 }
 
 fn smooth_curve_to(abs: bool,
                    cp: Option<(f64, f64)>,
                    p: (f64, f64),
                    params: &PathParams) -> Option<PathElem> {
-    let cp1 = cp.map_or_else(|| p, |(x2, y2)| {
-        let (x, y) = p;
-        (2.0*x - x2, 2.0*y - y2)
-    });
+    let (cp1x, cp1y) = cp.map_or_else(|| p, |r| reflect(p, r));
     match *params {
         PathParams::SQParam(x2, y2, x, y) => Some(if abs {
             PathElem::CurveTo {
-                x1: cp1.0,
-                y1: cp1.1,
+                x1: cp1x,
+                y1: cp1y,
                 x2: x2,
                 y2: y2,
                 x: x,
@@ -282,8 +283,8 @@ fn smooth_curve_to(abs: bool,
             }
         } else {
             PathElem::CurveTo {
-                x1: cp1.0,
-                y1: cp1.1,
+                x1: cp1x,
+                y1: cp1y,
                 x2: x2 + p.0,
                 y2: y2 + p.1,
                 x: x + p.0,
@@ -294,20 +295,56 @@ fn smooth_curve_to(abs: bool,
     }
 }
 
+fn quad_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
+    match *params {
+        PathParams::SQParam(x1, y1, x, y) => Some(pt.map_or_else(|| PathElem::QuadraticTo {
+            x1: x1,
+            y1: y1,
+            x: x,
+            y: y
+        }, |(cx, cy)| PathElem::QuadraticTo {
+            x1: x1 + cx,
+            y1: y1 + cy,
+            x: x + cx,
+            y: y + cy,
+        })),
+        _ => None
+    }
+}
+
+fn t_quad_to(abs: bool,
+             cp: Option<(f64, f64)>,
+             p: (f64, f64),
+             params: &PathParams) -> Option<PathElem> {
+    let (cpx, cpy) = cp.map_or_else(|| p, |r| reflect(p, r));
+    match *params {
+        PathParams::MLTParam(x, y) => Some(if abs {
+            PathElem::QuadraticTo {
+                x1: cpx,
+                y1: cpy,
+                x: x,
+                y: y
+            }
+        } else {
+            PathElem::QuadraticTo {
+                x1: cpx,
+                y1: cpy,
+                x: x + p.0,
+                y: y + p.1,
+            }
+        }),
+        _ => None
+    }
+}
+
 struct PathState {
     v: Vec<PathElem>,
-    initial_pt: Option<(f64, f64)>,
-    prev_pt: Option<(f64, f64)>,
-    prev_cp: Option<(f64, f64)>
 }
 
 impl PathState {
     fn new() -> PathState {
         PathState {
-            v: Vec::<PathElem>::new(),
-            initial_pt: None,
-            prev_pt: None,
-            prev_cp: None
+            v: Vec::<PathElem>::new()
         }
     }
 
@@ -321,26 +358,36 @@ impl PathState {
         }
     }
 
-    fn control_point_for(elem: &PathElem) -> Option<(f64, f64)> {
-        match *elem {
+    fn last_curve_cp(&self) -> Option<(f64, f64)> {
+        self.v.last().and_then(|elem| match *elem {
             PathElem::CurveTo { x2, y2, .. } => Some((x2, y2)),
             _ => None
-        }
+        })
+    }
+
+    fn last_quad_cp(&self) -> Option<(f64, f64)> {
+        self.v.last().and_then(|elem| match *elem {
+            PathElem::QuadraticTo { x1, y1, .. } => Some((x1, y1)),
+            _ => None
+        })
+    }
+
+    fn initial_pt(&self) -> Option<(f64, f64)> {
+        self.v.get(0).map(PathState::point_for)
+    }
+    
+    fn last_pt(&self) -> Option<(f64, f64)> {
+        self.v.last().map(PathState::point_for)
     }
 
     fn update(&mut self, elem: PathElem) {
-        if self.prev_pt.is_none() {
-            self.initial_pt = Some(PathState::point_for(&elem));
-        }
-        self.prev_pt = Some(PathState::point_for(&elem));
-        self.prev_cp = PathState::control_point_for(&elem);
         self.v.push(elem);
     }
 }
 
 fn convert_token(token: PathToken, mut params: Vec<PathParams>,
                  mut s: PathState) -> PathState {
-
+    let origin = (0 as f64, 0 as f64);
     match token {
         PathToken::MU => {
             let move_loc = params.remove(0);
@@ -351,40 +398,40 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
         },
         PathToken::ML => {
             let move_loc = params.remove(0);
-            let mt = move_to(s.prev_pt, &move_loc).unwrap();
+            let mt = move_to(s.last_pt(), &move_loc).unwrap();
             s.update(mt);
             for p in params {
-                let elem = line_to(s.prev_pt, &p).unwrap();
+                let elem = line_to(s.last_pt(), &p).unwrap();
                 s.update(elem);
             }
         },
         PathToken::Z => {
-            let (ix, iy) = s.initial_pt.unwrap_or((0 as f64, 0 as f64));
+            let (ix, iy) = s.initial_pt().unwrap_or(origin);
             s.update(PathElem::LineTo { x: ix, y: iy });
-            let (px, py) = s.prev_pt.unwrap_or((0 as f64, 0 as f64));
+            let (px, py) = s.last_pt().unwrap_or(origin);
             s.update(PathElem::MoveTo { x: px, y: py });
         },
         PathToken::LU => for p in params {
             s.update(line_to(None, &p).unwrap());
         },
         PathToken::LL => for p in params {
-            let elem = line_to(s.prev_pt, &p).unwrap();
+            let elem = line_to(s.last_pt(), &p).unwrap();
             s.update(elem);
         },
         PathToken::HU =>  for p in params {
-            let elem = line_to_h(true, s.prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            let elem = line_to_h(true, s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
         PathToken::HL =>  for p in params {
-            let elem = line_to_h(false, s.prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            let elem = line_to_h(false, s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
         PathToken::VU => for p in params {
-            let elem = line_to_v(true, s.prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            let elem = line_to_v(true, s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
         PathToken::VL => for p in params {
-            let elem = line_to_v(false, s.prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            let elem = line_to_v(false, s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
         PathToken::CU => for p in params {
@@ -392,22 +439,38 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
             s.update(elem);
         },
         PathToken::CL => for p in params {
-            let elem = curve_to(s.prev_pt, &p).unwrap();
+            let elem = curve_to(s.last_pt(), &p).unwrap();
             s.update(elem);
         },
         PathToken::SU => for p in params {
-            let elem = smooth_curve_to(true, s.prev_cp,
-                                     s.prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            let elem = smooth_curve_to(true, s.last_curve_cp(),
+                                     s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
         PathToken::SL => for p in params {
-            let elem = smooth_curve_to(false, s.prev_cp,
-                                     s.prev_pt.unwrap_or((0 as f64, 0 as f64)), &p).unwrap();
+            let elem = smooth_curve_to(false, s.last_curve_cp(),
+                                     s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
 
-        PathToken::QU | PathToken::QL => panic!("Not Implemented"),
-        PathToken::TU | PathToken::TL => panic!("Not Implemented"),
+        PathToken::QU => for p in params {
+            let elem = quad_to(None, &p).unwrap();
+            s.update(elem);
+        },
+        PathToken::QL => for p in params {
+            let elem = quad_to(s.last_pt(), &p).unwrap();
+            s.update(elem);
+        },
+        PathToken::TU => for p in params {
+            let elem = t_quad_to(true, s.last_quad_cp(),
+                s.last_pt().unwrap_or(origin), &p).unwrap();
+            s.update(elem);
+        },
+        PathToken::TL => for p in params {
+            let elem = t_quad_to(false, s.last_quad_cp(),
+                s.last_pt().unwrap_or(origin), &p).unwrap();
+            s.update(elem);
+        },
         PathToken::AU | PathToken::AL => panic!("Not Implemented")
     };
 
