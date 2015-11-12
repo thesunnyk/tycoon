@@ -337,6 +337,30 @@ fn t_quad_to(abs: bool,
     }
 }
 
+fn arc_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
+    match *params {
+        PathParams::AParam(rx, ry, x_rotation, lrg_arc, sweep, x, y) =>
+            Some(pt.map_or_else(|| PathElem::ArcTo {
+                rx: rx,
+                ry: ry,
+                x_rotation: x_rotation,
+                lrg_arc: lrg_arc,
+                sweep: sweep,
+                x: x,
+                y: y
+            }, |(cx, cy)| PathElem::ArcTo {
+                rx: rx,
+                ry: ry,
+                x_rotation: x_rotation,
+                lrg_arc: lrg_arc,
+                sweep: sweep,
+                x: x + cx,
+                y: y + cy,
+            })),
+        _ => None
+    }
+}
+
 struct PathState {
     v: Vec<PathElem>,
 }
@@ -471,7 +495,14 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
                 s.last_pt().unwrap_or(origin), &p).unwrap();
             s.update(elem);
         },
-        PathToken::AU | PathToken::AL => panic!("Not Implemented")
+        PathToken::AU => for p in params {
+            let elem = arc_to(None, &p).unwrap();
+            s.update(elem);
+        },
+        PathToken::AL => for p in params {
+            let elem = arc_to(s.last_pt(), &p).unwrap();
+            s.update(elem);
+        }
     };
 
     s
