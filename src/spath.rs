@@ -177,7 +177,7 @@ fn get_cmd_with_params(s: &str) -> Option<(PathToken, Vec<PathParams>, &str)> {
 
 fn tokenize(si: &str) -> Vec<(PathToken, Vec<PathParams>)> {
     let s: String = switch_commas_with_spaces(si);
-    let mut sb: &str = s.borrow();
+    let sb: &str = s.borrow();
     let mut so = sb.trim_left();
     let mut v = Vec::<(PathToken, Vec<PathParams>)>::new();
     while !so.is_empty() {

@@ -2,8 +2,8 @@
 mod gameloop;
 mod utils;
 mod rendererutils;
-// Just to make spath compile
 mod spath;
+mod ditty;
 
 use gameloop::GameLoop;
 use utils::FatalAction;
@@ -13,11 +13,8 @@ fn main() {
     let path = "m 253.10857,238.95418 -1.008,3.456 c -1.728,-3.024 -4.752,-4.536 -9,-4.536 -10.656,0 -20.592,10.8 -20.592,22.464 0,7.632 5.184,13.032 12.456,13.032 4.968,0 8.28,-1.8 11.736,-6.264 0,1.584 0,1.728 0.216,2.304 0.648,2.376 3.024,4.032 5.904,4.032 3.6,0 6.84,-1.872 10.368,-5.832 1.944,-2.232 3.528,-4.464 4.752,-6.552 l -2.808,-1.8 c -2.664,4.176 -6.264,8.064 -7.488,8.064 -0.504,0 -1.008,-0.576 -1.008,-1.152 0,-0.504 0,-0.504 0.72,-3.312 l 7.056,-23.904 -11.304,0 z m -7.704,2.88 c 2.664,0 4.464,2.16 4.464,5.256 0,3.6 -1.584,9.648 -3.744,14.256 -2.088,4.608 -4.68,6.984 -7.488,6.984 -2.664,0 -4.392,-2.232 -4.392,-5.688 0,-3.816 1.44,-9.576 3.528,-13.896 2.232,-4.68 4.68,-6.912 7.632,-6.912 z";
 
     let ans = spath::read_path(path);
+    let ditty = ditty::BackgroundDitty::new();
 
-    for i in ans {
-        println!(">> {:?}", i);
-    }
-
-    // let mainloop = GameLoop::new().or_die("create Game Loop");
-    // mainloop.run().or_die("run Game Loop");
+    let mainloop = GameLoop::new().or_die("create Game Loop");
+    mainloop.run(ditty).or_die("run Game Loop");
 }
