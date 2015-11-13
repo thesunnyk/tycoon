@@ -5,4 +5,5 @@ authors = ["Sunny Kalsi <thesunnyk@gmail.com>"]
 
 [dependencies]
 sdl2 = "0.9.1"
+xml-rs = "0.2.2"
 

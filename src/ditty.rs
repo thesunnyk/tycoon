@@ -11,6 +11,7 @@ use self::sdl2::pixels::Color;
 use self::sdl2::render::Renderer;
 use self::sdl2::render::Texture;
 use self::sdl2::rect::Point;
+use self::sdl2::rect::Rect;
 
 use spath::PathElem;
 use rendererutils::RendererUtils;
@@ -55,12 +56,12 @@ impl Ditty for BackgroundDitty {
 }
 
 pub struct PathDitty {
-    path: Vec<PathElem>
+    paths: Vec<Vec<PathElem>>
 }
 
 impl PathDitty {
-    pub fn new(path: Vec<PathElem>) -> PathDitty {
-        PathDitty { path: path }
+    pub fn new(paths: Vec<Vec<PathElem>>) -> PathDitty {
+        PathDitty { paths: paths }
     }
 }
 
@@ -69,36 +70,48 @@ impl Ditty for PathDitty {
     }
 
     fn render(&mut self, renderer: &mut Renderer, width: u32, height: u32) {
-        let mut cp = Point::new(0, 0);
+        for path in &self.paths {
+            let mut cp = Point::new(0, 0);
+            for elem in path {
+                match elem {
+                    &PathElem::MoveTo { x, y } => {
+                        cp = Point::new(x as i32, y as i32);
+                    },
+                    &PathElem::LineTo { x, y } => {
+                        let np = Point::new(x as i32, y as i32);
+                        renderer.set_draw_color(Color::RGB(255, 0, 0));
+                        renderer.draw_line(cp, np);
+                        cp = np;
+                    },
+                    &PathElem::CurveTo { x1, y1, x2, y2, x, y } => {
+                        let np = Point::new(x as i32, y as i32);
+                        let cp1 = Point::new(x1 as i32, y1 as i32);
+                        let cp2 = Point::new(x2 as i32, y2 as i32);
+                        renderer.set_draw_color(Color::RGB(64, 64, 64));
+                        renderer.draw_line(cp, cp1);
+                        renderer.draw_line(np, cp2);
 
-        for elem in &self.path {
-            match elem {
-                &PathElem::MoveTo { x, y } => {
-                    cp = Point::new(x as i32, y as i32);
-                },
-                &PathElem::LineTo { x, y } => {
-                    let np = Point::new(x as i32, y as i32);
-                    renderer.set_draw_color(Color::RGB(255, 0, 0));
-                    renderer.draw_line(cp, np);
-                    cp = np;
-                },
-                &PathElem::CurveTo { x, y, .. } => {
-                    let np = Point::new(x as i32, y as i32);
-                    renderer.set_draw_color(Color::RGB(255, 128, 0));
-                    renderer.draw_line(cp, np);
-                    cp = np;
-                },
-                &PathElem::QuadraticTo { x, y, .. } => {
-                    let np = Point::new(x as i32, y as i32);
-                    renderer.set_draw_color(Color::RGB(0, 255, 0));
-                    renderer.draw_line(cp, np);
-                    cp = np;
-                },
-                &PathElem::ArcTo { x, y, .. } => {
-                    let np = Point::new(x as i32, y as i32);
-                    renderer.set_draw_color(Color::RGB(255, 255, 0));
-                    renderer.draw_line(cp, np);
-                    cp = np;
+                        let cpr1 = Rect::new_unwrap((x1 as i32) - 1, (y1 as i32) - 1, 2, 2);
+                        let cpr2 = Rect::new_unwrap((x2 as i32) - 1, (y2 as i32) - 1, 2, 2);
+                        renderer.set_draw_color(Color::RGB(255, 128, 0));
+                        renderer.draw_rect(cpr1);
+                        renderer.draw_rect(cpr2);
+
+                        renderer.draw_line(cp, np);
+                        cp = np;
+                    },
+                    &PathElem::QuadraticTo { x, y, .. } => {
+                        let np = Point::new(x as i32, y as i32);
+                        renderer.set_draw_color(Color::RGB(0, 255, 0));
+                        renderer.draw_line(cp, np);
+                        cp = np;
+                    },
+                    &PathElem::ArcTo { x, y, .. } => {
+                        let np = Point::new(x as i32, y as i32);
+                        renderer.set_draw_color(Color::RGB(255, 255, 0));
+                        renderer.draw_line(cp, np);
+                        cp = np;
+                    }
                 }
             }
         }

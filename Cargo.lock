@@ -3,6 +3,7 @@ name = "tycoon"
 version = "0.1.0"
 dependencies = [
  "sdl2 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xml-rs 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -78,4 +79,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "winapi-build"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "xml-rs"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "bitflags 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
