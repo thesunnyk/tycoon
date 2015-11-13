@@ -69,7 +69,8 @@ fn get_cmd(s: &str) -> Option<(PathToken, &str)> {
 }
 
 fn split_num(s: &str) -> (&str, &str) {
-    s.split_at(s.find(|c: char| c != '.' && c != '-' && !c.is_numeric()).unwrap_or(s.len()))
+    s.split_at(s.find(|c: char| c != '.' && c != '-' &&
+                      c != 'e' && !c.is_numeric()).unwrap_or(s.len()))
 }
 
 fn get_f64(s: &str) -> Option<(f64, &str)> {
@@ -354,12 +355,16 @@ fn arc_to(pt: Option<(f64, f64)>, params: &PathParams) -> Option<PathElem> {
 
 struct PathState {
     v: Vec<PathElem>,
+    zcmd: bool,
+    ipt: Option<(f64, f64)>
 }
 
 impl PathState {
     fn new() -> PathState {
         PathState {
-            v: Vec::<PathElem>::new()
+            v: Vec::<PathElem>::new(),
+            zcmd: true,
+            ipt: None
         }
     }
 
@@ -388,14 +393,25 @@ impl PathState {
     }
 
     fn initial_pt(&self) -> Option<(f64, f64)> {
-        self.v.get(0).map(PathState::point_for)
+        self.ipt
     }
     
     fn last_pt(&self) -> Option<(f64, f64)> {
         self.v.last().map(PathState::point_for)
     }
 
+    fn set_zcmd(&mut self) {
+        self.zcmd = true;
+    }
+
     fn update(&mut self, elem: PathElem) {
+        if self.zcmd {
+            match &elem {
+                &PathElem::MoveTo { x, y } => self.ipt = Some((x, y)),
+                _ => ()
+            }
+            self.zcmd = false;
+        }
         self.v.push(elem);
     }
 }
@@ -419,11 +435,13 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
             let (ix, iy) = s.initial_pt().unwrap_or(origin);
             let (px, py) = s.last_pt().unwrap_or(origin);
             s.update(PathElem::LineTo { x: ix, y: iy });
+            s.set_zcmd();
             s.update(PathElem::MoveTo { x: px, y: py });
+            s.set_zcmd();
         },
         PathToken::L(abs) => {
-            let lpt = if abs { None } else { s.last_pt() };
             for p in params {
+                let lpt = if abs { None } else { s.last_pt() };
                 let elem = line_to(lpt, &p).unwrap();
                 s.update(elem);
             }
@@ -437,8 +455,8 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
             s.update(elem);
         },
         PathToken::C(abs) => {
-            let lpt = if abs { None } else { s.last_pt() };
             for p in params {
+                let lpt = if abs { None } else { s.last_pt() };
                 let elem = curve_to(lpt, &p).unwrap();
                 s.update(elem);
             }
@@ -449,8 +467,8 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
             s.update(elem);
         },
         PathToken::Q(abs) => {
-            let lpt = if abs { None } else { s.last_pt() };
             for p in params {
+                let lpt = if abs { None } else { s.last_pt() };
                 let elem = quad_to(lpt, &p).unwrap();
                 s.update(elem);
             }
@@ -461,8 +479,8 @@ fn convert_token(token: PathToken, mut params: Vec<PathParams>,
             s.update(elem);
         },
         PathToken::A(abs) => {
-            let lpt = if abs { None } else { s.last_pt() };
             for p in params {
+                let lpt = if abs { None } else { s.last_pt() };
                 let elem = arc_to(lpt, &p).unwrap();
                 s.update(elem);
             }

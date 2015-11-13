@@ -57,7 +57,9 @@ impl GameLoop {
             }
             // Logic
             // Rendering
+            renderer.clear();
             ditty.render(&mut renderer, self.width, self.height);
+            renderer.present();
 
             while timer.ticks() - start_ticks < 1000 / 60 {
                 timer.delay(1);
